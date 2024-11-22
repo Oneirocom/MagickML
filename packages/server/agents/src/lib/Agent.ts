@@ -499,7 +499,7 @@ export class Agent
   ): boolean {
     const channel = this.channels.get(channelId)
     if (channel) {
-      super.emit(event, data) // Global emit
+      super.emit(event, ...([data] as Parameters<AgentEvents[K]>)) // Global emit
       return channel.emit(event, data) // Channel-specific emit
     }
     return false
@@ -514,7 +514,7 @@ export class Agent
     if (channelId) {
       return this.handleChannelEvent(channelId, event, data)
     }
-    return super.emit(event, data)
+    return super.emit(event, ...([data] as Parameters<AgentEvents[K]>))
   }
 }
 
