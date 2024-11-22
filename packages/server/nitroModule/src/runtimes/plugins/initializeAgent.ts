@@ -9,80 +9,98 @@ import { PrismaClient } from '@magickml/server-db'
 import { v4 as uuidv4 } from 'uuid'
 import fs from 'fs'
 
-const prisma = new PrismaClient()
+// Create a single PrismaClient instance to be reused
+const prisma = new PrismaClient({
+  log: ['error'],
+  datasources: {
+    db: {
+      url: process.env.DATABASE_URL,
+    },
+  },
+})
 
 type Config = NitroRuntimeConfig & AgentInterface
 
 export default defineNitroPlugin(async nitroApp => {
-  const app = (await initApp()) as any
-
-  const runtimeConfig = useRuntimeConfig<Config>()
-  const config = { ...runtimeConfig }
-
-  nitroApp.agentServer = app
-
-  let agentId: string | undefined
-
   try {
-    const configFile = fs.readFileSync('agent-config.json', 'utf8')
-    const configData = JSON.parse(configFile)
-    agentId = configData.AGENT_ID
-  } catch (error) {
-    console.error('Error reading agent-config.json:', error)
-  }
+    const app = (await initApp()) as any
+    const runtimeConfig = useRuntimeConfig<Config>()
+    const config = { ...runtimeConfig }
 
-  agentId = agentId || runtimeConfig.agentId || uuidv4()
+    nitroApp.agentServer = app
 
-  const existingAgent = await prisma.agents.findUnique({
-    where: {
-      id: agentId,
-    },
-  })
+    let agentId: string | undefined
 
-  if (!existingAgent) {
-    const agent = await prisma.agents.create({
-      data: {
-        id: agentId as string,
-        name: agentId as string,
-        enabled: true,
-        version: '2.0',
-        updatedAt: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        isDraft: false,
-        projectId: runtimeConfig.projectId || 'default',
-        worldId: runtimeConfig.worldId || 'default',
-      },
-    })
-
-    console.log('Agent created:', agent.id)
-    console.log('AGHHHH')
-
-    // Double-check that the agent was created
-    const verifyAgent = await prisma.agents.findUnique({
-      where: { id: agent.id },
-    })
-
-    if (!verifyAgent) {
-      console.error('Agent creation failed or not immediately visible')
-    } else {
-      console.log('Agent verified in database')
+    try {
+      const configFile = fs.readFileSync('agent-config.json', 'utf8')
+      const configData = JSON.parse(configFile)
+      agentId = configData.AGENT_ID
+    } catch (error) {
+      console.error('Error reading agent-config.json:', error)
     }
 
-    const configData = { AGENT_ID: agent.id }
-    fs.writeFileSync('agent-config.json', JSON.stringify(configData, null, 2))
+    agentId = agentId || runtimeConfig.agentId || uuidv4()
 
-    config.agentId = agent.id
-    config.id = agent.id
-  } else {
-    console.log('Existing agent found:', existingAgent.id)
-    config.agentId = existingAgent.id
-    config.projectId = existingAgent.projectId || 'default'
-    config.id = existingAgent.id
+    // Use a single transaction for database operations
+    const agent = await prisma.$transaction(async tx => {
+      const existingAgent = await tx.agents.findUnique({
+        where: { id: agentId },
+      })
+
+      if (!existingAgent) {
+        const newAgent = await tx.agents.create({
+          data: {
+            id: agentId as string,
+            name: agentId as string,
+            enabled: true,
+            version: '2.0',
+            updatedAt: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+            isDraft: false,
+            projectId: runtimeConfig.projectId || 'default',
+            worldId: runtimeConfig.worldId || 'default',
+          },
+        })
+
+        const configData = { AGENT_ID: newAgent.id }
+        fs.writeFileSync(
+          'agent-config.json',
+          JSON.stringify(configData, null, 2)
+        )
+
+        config.agentId = newAgent.id
+        config.id = newAgent.id
+
+        return newAgent
+      }
+
+      config.agentId = existingAgent.id
+      config.projectId = existingAgent.projectId || 'default'
+      config.id = existingAgent.id
+
+      return existingAgent
+    })
+
+    console.log('Agent configured:', agent.id)
+
+    // Create agent instance
+    const agentInstance = new Agent(config, app.get('pubsub'), app)
+    await agentInstance.waitForInitialization()
+    await agentInstance.spellbook.loadSpells(magickSpells)
+
+    nitroApp.agent = agentInstance
+
+    // Add cleanup on process termination
+    const cleanup = async () => {
+      await prisma.$disconnect()
+      // Add any other cleanup needed
+    }
+
+    process.on('SIGINT', cleanup)
+    process.on('SIGTERM', cleanup)
+  } catch (error) {
+    console.error('Error initializing agent:', error)
+    await prisma.$disconnect()
+    throw error
   }
-  // // use data and app to create agent
-  const agent = new Agent(config, app.get('pubsub'), app)
-  await agent.waitForInitialization()
-  await agent.spellbook.loadSpells(magickSpells)
-
-  nitroApp.agent = agent
 })

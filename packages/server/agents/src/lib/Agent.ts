@@ -106,7 +106,7 @@ class Channel extends (EventEmitter as new () => TypedEmitter<ChannelEvents>) {
       ...data,
       channel: this.channelId,
     }
-    return this.agent.handleChannelEvent(this.channelId, event, eventData)
+    return super.emit(event, ...([eventData] as Parameters<ChannelEvents[K]>))
   }
 }
 
@@ -486,33 +486,37 @@ export class Agent
   // Add channel method to get/create channel instance
   channel(channelId: string): Channel {
     if (!this.channels.has(channelId)) {
-      this.channels.set(channelId, new Channel(channelId, this))
+      const channel = new Channel(channelId, this)
+
+      // Forward channel events to global agent events
+      const forwardEvent = <K extends keyof ChannelEvents>(
+        event: K,
+        data: Parameters<ChannelEvents[K]>[0]
+      ) => {
+        super.emit(event, ...([data] as Parameters<AgentEvents[K]>))
+      }
+
+      // Set up event forwarding
+      channel.on('message', data => forwardEvent('message', data))
+      channel.on('messageReceived', data =>
+        forwardEvent('messageReceived', data)
+      )
+      channel.on('messageStream', data => forwardEvent('messageStream', data))
+      channel.on('eventComplete', data => forwardEvent('eventComplete', data))
+      channel.on('error', data => forwardEvent('error', data))
+
+      this.channels.set(channelId, channel)
     }
     return this.channels.get(channelId)!
   }
 
-  // Internal method to handle channel events
-  handleChannelEvent<K extends keyof AgentEvents>(
-    channelId: string,
-    event: K,
-    data: Parameters<AgentEvents[K]>[0]
-  ): boolean {
-    const channel = this.channels.get(channelId)
-    if (channel) {
-      super.emit(event, ...([data] as Parameters<AgentEvents[K]>)) // Global emit
-      return channel.emit(event, data) // Channel-specific emit
-    }
-    return false
-  }
-
-  // Override emit to support channel routing
   emit<K extends keyof AgentEvents>(
     event: K,
     data: Parameters<AgentEvents[K]>[0]
   ): boolean {
     const channelId = (data as any)?.channel
     if (channelId) {
-      return this.handleChannelEvent(channelId, event, data)
+      return this.channel(channelId).emit(event, data)
     }
     return super.emit(event, ...([data] as Parameters<AgentEvents[K]>))
   }
