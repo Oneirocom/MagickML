@@ -96,18 +96,23 @@ type ChannelEvents = {
 class Channel extends (EventEmitter as new () => TypedEmitter<ChannelEvents>) {
   constructor(private channelId: string, private agent: Agent) {
     super()
-    this.agent = agent
   }
 
   emit<K extends keyof ChannelEvents>(
     event: K,
     data: Parameters<ChannelEvents[K]>[0]
   ): boolean {
-    const eventData = {
+    return super.emit(event, ...([data] as Parameters<ChannelEvents[K]>))
+  }
+
+  emitToAgent<K extends keyof AgentEvents>(
+    event: K,
+    data: Parameters<AgentEvents[K]>[0]
+  ): boolean {
+    return this.agent.emit(event, {
       ...data,
       channel: this.channelId,
-    }
-    return this.agent.emit(event, eventData)
+    })
   }
 }
 
