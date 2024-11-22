@@ -85,6 +85,31 @@ type AgentEvents = {
   error: (error: ActionPayload) => void
 }
 
+type ChannelEvents = {
+  message: (event: EventPayload) => void
+  messageReceived: (event: ActionPayload) => void
+  messageStream: (event: ActionPayload) => void
+  eventComplete: (event: EventPayload | null) => void
+  error: (error: ActionPayload) => void
+}
+
+class Channel extends (EventEmitter as new () => TypedEmitter<ChannelEvents>) {
+  constructor(private channelId: string, private agent: Agent) {
+    super()
+  }
+
+  emit<K extends keyof ChannelEvents>(
+    event: K,
+    data: Parameters<ChannelEvents[K]>[0]
+  ): boolean {
+    const eventData = {
+      ...data,
+      channel: this.channelId,
+    }
+    return this.agent.handleChannelEvent(this.channelId, event, eventData)
+  }
+}
+
 const plugins = [CorePlugin, KnowledgePlugin, DiscordPlugin, SlackPlugin]
 
 /**
@@ -114,6 +139,7 @@ export class Agent
   loggingService: AgentLoggingService<this>
   seraphManager?: SeraphManager
   private initializationPromise: Promise<void>
+  private channels: Map<string, Channel> = new Map()
 
   /**
    * Agent constructor initializes properties and sets intervals for updating agents
@@ -455,6 +481,40 @@ export class Agent
       eventType,
       event,
     })
+  }
+
+  // Add channel method to get/create channel instance
+  channel(channelId: string): Channel {
+    if (!this.channels.has(channelId)) {
+      this.channels.set(channelId, new Channel(channelId, this))
+    }
+    return this.channels.get(channelId)!
+  }
+
+  // Internal method to handle channel events
+  handleChannelEvent<K extends keyof AgentEvents>(
+    channelId: string,
+    event: K,
+    data: Parameters<AgentEvents[K]>[0]
+  ): boolean {
+    const channel = this.channels.get(channelId)
+    if (channel) {
+      super.emit(event, data) // Global emit
+      return channel.emit(event, data) // Channel-specific emit
+    }
+    return false
+  }
+
+  // Override emit to support channel routing
+  emit<K extends keyof AgentEvents>(
+    event: K,
+    data: Parameters<AgentEvents[K]>[0]
+  ): boolean {
+    const channelId = (data as any)?.channel
+    if (channelId) {
+      return this.handleChannelEvent(channelId, event, data)
+    }
+    return super.emit(event, data)
   }
 }
 
