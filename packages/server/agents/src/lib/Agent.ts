@@ -217,17 +217,19 @@ export class Agent
 
     // Set up global event routing to channels with debug logging
     this.on('messageReceived', (data: ActionPayload) => {
-      console.log('Agent received messageReceived event:', data)
-      const channelId = (data as any)?.channel
+      const channelId = data?.event?.channel
       if (channelId && this.channels.has(channelId)) {
-        console.log(`Forwarding messageReceived to channel ${channelId}`)
         this.channels.get(channelId)!.emit('messageReceived', data)
+      } else {
+        console.log('No channel found for messageReceived:', {
+          channelId,
+          data,
+        })
       }
     })
 
     this.on('message', (data: EventPayload) => {
-      console.log('Agent received message event:', data)
-      const channelId = (data as any)?.channel
+      const channelId = data.channel
       if (channelId && this.channels.has(channelId)) {
         console.log(`Forwarding message to channel ${channelId}`)
         this.channels.get(channelId)!.emit('message', data)
@@ -235,21 +237,21 @@ export class Agent
     })
 
     this.on('messageStream', (data: ActionPayload) => {
-      const channelId = (data as any)?.channel
+      const channelId = data.event.channel
       if (channelId && this.channels.has(channelId)) {
         this.channels.get(channelId)!.emit('messageStream', data)
       }
     })
 
     this.on('eventComplete', (data: EventPayload | null) => {
-      const channelId = (data as any)?.channel
+      const channelId = data?.channel
       if (channelId && this.channels.has(channelId)) {
         this.channels.get(channelId)!.emit('eventComplete', data)
       }
     })
 
     this.on('error', (data: ActionPayload) => {
-      const channelId = (data as any)?.channel
+      const channelId = data.event.channel
       if (channelId && this.channels.has(channelId)) {
         this.channels.get(channelId)!.emit('error', data)
       }
