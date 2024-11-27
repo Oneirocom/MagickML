@@ -96,12 +96,14 @@ type ChannelEvents = {
 class Channel extends (EventEmitter as new () => TypedEmitter<ChannelEvents>) {
   constructor(private channelId: string, private agent: Agent) {
     super()
+    console.log(`Channel ${channelId} constructed`)
   }
 
   emit<K extends keyof ChannelEvents>(
     event: K,
     data: Parameters<ChannelEvents[K]>[0]
   ): boolean {
+    console.log(`Channel ${this.channelId} emitting ${event}:`, data)
     return super.emit(event, ...([data] as Parameters<ChannelEvents[K]>))
   }
 
@@ -109,10 +111,19 @@ class Channel extends (EventEmitter as new () => TypedEmitter<ChannelEvents>) {
     event: K,
     data: Parameters<AgentEvents[K]>[0]
   ): boolean {
+    console.log(`Channel ${this.channelId} emitting to agent ${event}:`, data)
     return this.agent.emit(event, {
       ...data,
       channel: this.channelId,
     })
+  }
+
+  on<K extends keyof ChannelEvents>(
+    event: K,
+    listener: ChannelEvents[K]
+  ): this {
+    console.log(`Channel ${this.channelId} adding listener for ${event}`)
+    return super.on(event, listener)
   }
 }
 
@@ -204,17 +215,21 @@ export class Agent
 
     this.logger.info('New agent created: %s | %s', this.name, this.id)
 
-    // Set up global event routing to channels
+    // Set up global event routing to channels with debug logging
     this.on('messageReceived', (data: ActionPayload) => {
+      console.log('Agent received messageReceived event:', data)
       const channelId = (data as any)?.channel
       if (channelId && this.channels.has(channelId)) {
+        console.log(`Forwarding messageReceived to channel ${channelId}`)
         this.channels.get(channelId)!.emit('messageReceived', data)
       }
     })
 
     this.on('message', (data: EventPayload) => {
+      console.log('Agent received message event:', data)
       const channelId = (data as any)?.channel
       if (channelId && this.channels.has(channelId)) {
+        console.log(`Forwarding message to channel ${channelId}`)
         this.channels.get(channelId)!.emit('message', data)
       }
     })
@@ -527,7 +542,9 @@ export class Agent
 
   // Add channel method to get/create channel instance
   channel(channelId: string): Channel {
+    console.log(`Getting/creating channel for ${channelId}`)
     if (!this.channels.has(channelId)) {
+      console.log(`Creating new channel for ${channelId}`)
       const channel = new Channel(channelId, this)
       this.channels.set(channelId, channel)
     }

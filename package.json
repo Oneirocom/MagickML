@@ -17,6 +17,7 @@
     "dev:server": "nx serve @magickml/server",
     "bucket:init": "ts-node ./scripts/init-bucket.ts",
     "build-release": "nx run-many --target=build --parallel=20 --projects=tag:release",
+    "build-release:watch": "nx run-many --target=build --parallel=20 --projects=tag:release --watch",
     "build-client": "npx nx build @magickml/client",
     "build-cloud-agent-manager": "npm run generateClients && npx nx build @magickml/cloud-agent-manager-app",
     "build-cloud-agent-worker": "npm run generateClients && npx nx build @magickml/cloud-agent-worker-app",
