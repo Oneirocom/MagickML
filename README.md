@@ -30,7 +30,7 @@
 
 ## 🔮 Magick: Automate, Build, and Bring Your Ideas to Life with AI.
 
-With Magick, you can unleash the power of AI without needing to know how to code everytbing in a command line interface. Using our visual node based environment, you can connect to popular services and explore a world of pre-built nodes and connectors to bring your vision to life.
+With Magick, you can unleash the power of AI without needing to know how to code everything in a command line interface. Using our visual node based environment, you can connect to popular services and explore a world of pre-built nodes and connectors to bring your vision to life.
 
 <p align="center"><img src="apps/docs/readme-files/ui.png" /></p>
 
